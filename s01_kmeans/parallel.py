@@ -1,28 +1,12 @@
 """Parallel Lloyd's K-means using a persistent multiprocessing.Pool.
 
-Design:
-- The dataset is placed once in multiprocessing.shared_memory (both as
-  given, for the distance/assign step, and transposed, for the
-  bincount-based reduction grouped_sums needs) and never re-pickled —
-  each worker opens it by name in a Pool initializer and keeps
-  module-global ndarray views for the Pool's lifetime.
-- Each iteration, the (small) current centroids are sent to each worker,
-  which assigns its shard of points and returns per-cluster partial sums
-  and counts; the main process reduces those into new centroids.
-- Pool(...) returns as soon as worker *processes* exist, not once their
-  initializer (which imports NumPy and opens shared memory) has actually
-  finished — measured directly: a Pool with a 1.5s initializer still
-  returns in ~0.03s. Left alone, that startup cost would land inside the
-  first iteration's result-gathering wait and be misattributed as
-  communication/IPC overhead. A Barrier makes the main process wait for
-  every worker to finish its initializer before scheduling_time stops.
-- Per-iteration time is split into:
-    * scheduling  — pool creation/worker startup (via the Barrier) + task dispatch (enqueueing)
-    * communication — IPC/pickling overhead beyond the slowest worker's
-      own reported compute time (i.e. time spent waiting on results
-      minus actual compute)
-    * synchronization — the main process's reduction step itself
-  This matches the breakdown named in the experiment spec.
+The dataset lives in shared_memory (row-major for distance calc, and
+transposed for the reduction step) so it's never re-pickled per worker
+call. Each iteration, workers get the current centroids, assign their
+shard of points, and return partial sums/counts for the main process to
+reduce. A Barrier makes sure Scheduling_Time includes worker startup
+(importing numpy, opening shared memory) and not just Pool() returning,
+since Pool() doesn't actually wait for workers to be ready.
 """
 
 from . import _pin_blas  # noqa: F401  (must precede `import numpy`)
@@ -50,8 +34,7 @@ def _worker_init(shm_name, shape, shm_name_T, shape_T, dtype_name, ready_barrier
     _shared_data = np.ndarray(shape, dtype=np.dtype(dtype_name), buffer=_shm_handle.buf)
     _shm_handle_T = shared_memory.SharedMemory(name=shm_name_T)
     _shared_data_T = np.ndarray(shape_T, dtype=np.dtype(dtype_name), buffer=_shm_handle_T.buf)
-    # Timed: an unreached barrier (e.g. a sibling worker crashed on startup)
-    # would otherwise hang the main process forever instead of failing loudly.
+    # timeout so a crashed sibling worker doesn't hang this forever
     ready_barrier.wait(timeout=_WORKER_READY_TIMEOUT_SECONDS)
 
 
@@ -118,9 +101,7 @@ def kmeans_parallel(X, k, initial_centroids, n_workers, max_iter=100, tol=1e-4):
             initializer=_worker_init,
             initargs=(shm.name, X.shape, shm_T.name, X_T.shape, X.dtype.name, ready_barrier),
         )
-        # Blocks until every worker has imported numpy and opened shared memory,
-        # or raises BrokenBarrierError within _WORKER_READY_TIMEOUT_SECONDS if one didn't.
-        ready_barrier.wait(timeout=_WORKER_READY_TIMEOUT_SECONDS)
+        ready_barrier.wait(timeout=_WORKER_READY_TIMEOUT_SECONDS)  # wait for workers to actually be ready
         scheduling_time += time.perf_counter() - t_pool_create_start
 
         try:
@@ -162,12 +143,8 @@ def kmeans_parallel(X, k, initial_centroids, n_workers, max_iter=100, tol=1e-4):
                 if shift < tol:
                     break
 
-            # No final full-dataset label pass here: the sequential
-            # baseline gets labels for free as a byproduct of its last
-            # _assign() call, but recomputing them here would be a whole
-            # extra serial distance computation charged only against the
-            # parallel run — unfair to the comparison, and nothing
-            # downstream (CSV rows, tests) uses parallel labels anyway.
+            # no final label pass (would be an extra serial cost unfair
+            # to the comparison, and nothing downstream needs it)
             labels = None
         finally:
             pool.close()

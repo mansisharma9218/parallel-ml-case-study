@@ -1,18 +1,11 @@
-"""Per-run peak memory measurement across the main process and any live
-child processes (the worker pool), via a background-thread psutil
-sampler.
-
-common/memory.py's peak_memory_mb() only reports the main process's
-cumulative-since-process-start RSS: it ratchets upward across an entire
-experiment_runner.py invocation rather than resetting per run, and it
-never sees worker-process memory at all. Neither property is suitable
-for comparing individual sequential vs. parallel runs. This samples USS
-(unique set size — pages not shared with other processes) so the large
-shared_memory-backed dataset, mapped into every worker, isn't
-double-counted once per worker; the tradeoff is that the dataset's own
-footprint is then largely invisible to this measurement too, since no
-single process "uniquely" owns those shared pages. Worth stating as a
-limitation rather than treating Memory_Use as an exact figure.
+"""Per-run peak memory across the main process and any live worker
+children, via a background-thread psutil sampler. common/memory.py's
+peak_memory_mb() only tracks the main process's cumulative RSS since
+start, which isn't useful for comparing individual runs or seeing
+worker memory. Uses USS so the shared_memory dataset isn't
+double-counted per worker (tradeoff: the dataset's own footprint is
+then mostly invisible too, since it's shared rather than uniquely
+owned — worth noting as a limitation, not an exact measurement).
 """
 
 import threading

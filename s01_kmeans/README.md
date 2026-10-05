@@ -102,25 +102,20 @@ python3 -m pytest s01_kmeans/tests/ -v
   via matmul rather than a naive broadcasted difference, which keeps
   memory at O(n*k) instead of O(n*k*d) — relevant at n=2M, K=64, d=32,
   where the naive form would need ~33GB.
-- The per-cluster centroid-sum reduction (`sequential.grouped_sums`) is
+- The per-cluster centroid-sum reduction (`sequential.grouped_sums`) uses
   one `np.bincount(weights=...)` per feature column on a transposed copy
-  of the data, not `np.add.at`: `np.add.at` is an unbuffered scatter-add
-  with no internal vectorization, and was measured costing ~2.25s/call
-  at n=2M/d=32 independent of K — effectively the entire runtime of a
-  2M-point run. This version is ~15-20x faster.
-- `multiprocessing.Pool(...)` returns as soon as worker *processes*
-  exist, not once their initializer (imports NumPy, opens shared memory)
-  has finished — measured directly: a pool with a 1.5s initializer still
-  returns in ~0.03s. Left alone, that startup cost would land inside the
-  first iteration's result-gathering wait and be misattributed as
-  communication/IPC overhead; `parallel.py` uses a `multiprocessing.Barrier`
-  so `Scheduling_Time` only stops once every worker is actually ready.
-- The parallel run doesn't do a final full-dataset label pass after
-  converging (the sequential baseline gets labels for free as a
-  byproduct of its last iteration; redoing that work serially in the
-  parallel path would unfairly inflate its measured time) — so
-  `ParallelKMeansResult.labels` is always `None`. Nothing downstream
-  uses it.
+  of the data instead of `np.add.at`, which is much slower at this scale.
+- `multiprocessing.Pool(...)` returns once worker *processes* exist, not
+  once they've actually finished starting up (importing numpy, opening
+  shared memory). Left alone, that startup cost would land inside the
+  first iteration's result-gathering wait and get misattributed as
+  communication overhead, so `parallel.py` uses a `multiprocessing.Barrier`
+  to make `Scheduling_Time` wait for workers to actually be ready.
+- The parallel run skips the final full-dataset label pass after
+  converging — the sequential baseline gets labels for free from its
+  last iteration, but redoing that serially in the parallel path would
+  unfairly inflate its time, and nothing downstream uses the labels
+  anyway. `ParallelKMeansResult.labels` is always `None`.
 - `Memory_Use` is peak USS (unique, non-shared pages) summed across the
   main process and any live worker children, sampled by a background
   thread during each individual timed run (`memory_sampler.py`) — not a

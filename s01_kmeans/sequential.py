@@ -21,14 +21,8 @@ def grouped_sums(X_T, labels, k):
     """Per-cluster sums of X's rows, grouped by `labels` in [0, k).
 
     Takes X transposed (shape (d, n)) and does one np.bincount(weights=...)
-    per feature column. np.add.at (the obvious first implementation) is an
-    unbuffered scatter-add with no internal vectorization and was
-    dominating the sequential baseline's total time almost entirely
-    (~2.25s/call at n=2M, d=32, independent of k). A sort + np.add.reduceat
-    version was ~4.5x faster; this bincount-per-column version measured a
-    further ~3.5x faster than that (and, like reduceat, its cost is flat
-    in k) because bincount's C loop beats a sort+segmented-reduce here.
-    Returns (sums, counts); sums in float64 regardless of X_T's dtype.
+    per feature column instead of np.add.at, which is much slower at the
+    sizes used here. Returns (sums, counts); sums in float64.
     """
     sums = np.stack(
         [np.bincount(labels, weights=col, minlength=k) for col in X_T], axis=1
@@ -39,9 +33,7 @@ def grouped_sums(X_T, labels, k):
 
 def _assign(X, centroids):
     """Nearest-centroid assignment via ||x-c||^2 = ||x||^2 - 2x.c + ||c||^2,
-    computed with a matmul so memory is O(n*k) instead of the O(n*k*d)
-    that a naive broadcasted difference would allocate (e.g. 2M points x
-    64 clusters x 32 features would otherwise need ~33GB).
+    computed with a matmul so memory stays O(n*k) instead of O(n*k*d).
     """
     centroids32 = centroids.astype(np.float32, copy=False)
     x_sq = np.einsum("ij,ij->i", X, X)[:, None]
