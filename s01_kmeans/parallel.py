@@ -1,14 +1,23 @@
 """Parallel Lloyd's K-means using a persistent multiprocessing.Pool.
 
 Design:
-- The dataset is placed once in multiprocessing.shared_memory and never
-  re-pickled — each worker opens it by name in a Pool initializer and
-  keeps a module-global ndarray view for the Pool's lifetime.
+- The dataset is placed once in multiprocessing.shared_memory (both as
+  given, for the distance/assign step, and transposed, for the
+  bincount-based reduction grouped_sums needs) and never re-pickled —
+  each worker opens it by name in a Pool initializer and keeps
+  module-global ndarray views for the Pool's lifetime.
 - Each iteration, the (small) current centroids are sent to each worker,
   which assigns its shard of points and returns per-cluster partial sums
   and counts; the main process reduces those into new centroids.
+- Pool(...) returns as soon as worker *processes* exist, not once their
+  initializer (which imports NumPy and opens shared memory) has actually
+  finished — measured directly: a Pool with a 1.5s initializer still
+  returns in ~0.03s. Left alone, that startup cost would land inside the
+  first iteration's result-gathering wait and be misattributed as
+  communication/IPC overhead. A Barrier makes the main process wait for
+  every worker to finish its initializer before scheduling_time stops.
 - Per-iteration time is split into:
-    * scheduling  — pool creation (once) + task dispatch (enqueueing)
+    * scheduling  — pool creation/worker startup (via the Barrier) + task dispatch (enqueueing)
     * communication — IPC/pickling overhead beyond the slowest worker's
       own reported compute time (i.e. time spent waiting on results
       minus actual compute)
@@ -19,7 +28,7 @@ Design:
 from . import _pin_blas  # noqa: F401  (must precede `import numpy`)
 
 import time
-from multiprocessing import Pool
+from multiprocessing import Barrier, Pool
 from multiprocessing import shared_memory
 
 import numpy as np
@@ -27,18 +36,24 @@ import numpy as np
 from .sequential import grouped_sums
 
 _shared_data = None
+_shared_data_T = None
 _shm_handle = None
+_shm_handle_T = None
 
 
-def _worker_init(shm_name, shape, dtype_name):
-    global _shared_data, _shm_handle
+def _worker_init(shm_name, shape, shm_name_T, shape_T, dtype_name, ready_barrier):
+    global _shared_data, _shared_data_T, _shm_handle, _shm_handle_T
     _shm_handle = shared_memory.SharedMemory(name=shm_name)
     _shared_data = np.ndarray(shape, dtype=np.dtype(dtype_name), buffer=_shm_handle.buf)
+    _shm_handle_T = shared_memory.SharedMemory(name=shm_name_T)
+    _shared_data_T = np.ndarray(shape_T, dtype=np.dtype(dtype_name), buffer=_shm_handle_T.buf)
+    ready_barrier.wait()
 
 
 def _worker_partial_fit(start, end, centroids, k):
     t0 = time.perf_counter()
     X_shard = _shared_data[start:end]
+    X_T_shard = _shared_data_T[:, start:end]
 
     # ||x-c||^2 = ||x||^2 - 2x.c + ||c||^2 via matmul: O(shard*k) memory
     # instead of the O(shard*k*d) a naive broadcasted difference needs.
@@ -49,7 +64,7 @@ def _worker_partial_fit(start, end, centroids, k):
     dists = x_sq - 2.0 * cross + c_sq
     labels = dists.argmin(axis=1)
 
-    partial_sums, partial_counts = grouped_sums(X_shard, labels, k)
+    partial_sums, partial_counts = grouped_sums(X_T_shard, labels, k)
 
     compute_time = time.perf_counter() - t0
     return partial_sums, partial_counts, compute_time
@@ -63,7 +78,7 @@ def _make_shards(n, n_workers):
 class ParallelKMeansResult:
     def __init__(self, centroids, labels, n_iterations, timing):
         self.centroids = centroids
-        self.labels = labels
+        self.labels = labels  # always None: see note at the end of the loop below
         self.n_iterations = n_iterations
         self.timing = timing  # dict: scheduling/communication/synchronization/compute (seconds)
 
@@ -74,6 +89,7 @@ def kmeans_parallel(X, k, initial_centroids, n_workers, max_iter=100, tol=1e-4):
     """
     n, d = X.shape
     X = np.ascontiguousarray(X, dtype=np.float32)
+    X_T = np.ascontiguousarray(X.T)
 
     scheduling_time = 0.0
     communication_time = 0.0
@@ -82,22 +98,26 @@ def kmeans_parallel(X, k, initial_centroids, n_workers, max_iter=100, tol=1e-4):
 
     t_pool_create_start = time.perf_counter()
     shm = shared_memory.SharedMemory(create=True, size=X.nbytes)
+    shm_T = shared_memory.SharedMemory(create=True, size=X_T.nbytes)
     try:
         shm_array = np.ndarray(X.shape, dtype=X.dtype, buffer=shm.buf)
         shm_array[:] = X[:]
+        shm_array_T = np.ndarray(X_T.shape, dtype=X_T.dtype, buffer=shm_T.buf)
+        shm_array_T[:] = X_T[:]
 
         shards = _make_shards(n, n_workers)
 
+        ready_barrier = Barrier(n_workers + 1)
         pool = Pool(
             processes=n_workers,
             initializer=_worker_init,
-            initargs=(shm.name, X.shape, X.dtype.name),
+            initargs=(shm.name, X.shape, shm_T.name, X_T.shape, X.dtype.name, ready_barrier),
         )
+        ready_barrier.wait()  # blocks until every worker has imported numpy and opened shared memory
         scheduling_time += time.perf_counter() - t_pool_create_start
 
         try:
             centroids = initial_centroids.astype(np.float64).copy()
-            labels = None
 
             for iteration in range(1, max_iter + 1):
                 t_dispatch_start = time.perf_counter()
@@ -135,19 +155,21 @@ def kmeans_parallel(X, k, initial_centroids, n_workers, max_iter=100, tol=1e-4):
                 if shift < tol:
                     break
 
-            # Final label assignment for the converged centroids (main
-            # process; same memory-efficient formula as the workers use).
-            centroids32 = centroids.astype(np.float32, copy=False)
-            x_sq = np.einsum("ij,ij->i", X, X)[:, None]
-            c_sq = np.einsum("ij,ij->i", centroids32, centroids32)[None, :]
-            cross = X @ centroids32.T
-            labels = (x_sq - 2.0 * cross + c_sq).argmin(axis=1)
+            # No final full-dataset label pass here: the sequential
+            # baseline gets labels for free as a byproduct of its last
+            # _assign() call, but recomputing them here would be a whole
+            # extra serial distance computation charged only against the
+            # parallel run — unfair to the comparison, and nothing
+            # downstream (CSV rows, tests) uses parallel labels anyway.
+            labels = None
         finally:
             pool.close()
             pool.join()
     finally:
         shm.close()
         shm.unlink()
+        shm_T.close()
+        shm_T.unlink()
 
     timing = {
         "scheduling": scheduling_time,

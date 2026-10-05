@@ -88,6 +88,8 @@ python3 -m pytest s01_kmeans/tests/ -v
 - `test_parallel_vs_sequential.py` — the parallel version matches the
   sequential baseline for 1/2/4 workers, and reports a non-negative
   timing breakdown
+- `test_grouped_sums.py` — the vectorized per-cluster reduction
+  (`grouped_sums`, below) matches a naive per-cluster loop exactly
 
 ## Notes on the data
 
@@ -100,5 +102,40 @@ python3 -m pytest s01_kmeans/tests/ -v
   via matmul rather than a naive broadcasted difference, which keeps
   memory at O(n*k) instead of O(n*k*d) — relevant at n=2M, K=64, d=32,
   where the naive form would need ~33GB.
-- `Memory_Use` is the main process's peak RSS (`common/memory.py`); it
-  doesn't include worker-process memory.
+- The per-cluster centroid-sum reduction (`sequential.grouped_sums`) is
+  one `np.bincount(weights=...)` per feature column on a transposed copy
+  of the data, not `np.add.at`: `np.add.at` is an unbuffered scatter-add
+  with no internal vectorization, and was measured costing ~2.25s/call
+  at n=2M/d=32 independent of K — effectively the entire runtime of a
+  2M-point run. This version is ~15-20x faster.
+- `multiprocessing.Pool(...)` returns as soon as worker *processes*
+  exist, not once their initializer (imports NumPy, opens shared memory)
+  has finished — measured directly: a pool with a 1.5s initializer still
+  returns in ~0.03s. Left alone, that startup cost would land inside the
+  first iteration's result-gathering wait and be misattributed as
+  communication/IPC overhead; `parallel.py` uses a `multiprocessing.Barrier`
+  so `Scheduling_Time` only stops once every worker is actually ready.
+- The parallel run doesn't do a final full-dataset label pass after
+  converging (the sequential baseline gets labels for free as a
+  byproduct of its last iteration; redoing that work serially in the
+  parallel path would unfairly inflate its measured time) — so
+  `ParallelKMeansResult.labels` is always `None`. Nothing downstream
+  uses it.
+- `Memory_Use` is peak USS (unique, non-shared pages) summed across the
+  main process and any live worker children, sampled by a background
+  thread during each individual timed run (`memory_sampler.py`) — not a
+  whole-process-lifetime peak, and it does see worker memory. Caveat:
+  because it's USS, the large `shared_memory`-backed dataset (mapped
+  into every worker) is largely invisible to this measurement, since no
+  single process uniquely owns those pages — a known limitation, not a
+  bug, worth stating in the report rather than treating this column as
+  an exact figure.
+- `experiment_runner.py` is resume-safe: before each configuration it
+  counts existing rows in `raw_results.csv` for that exact
+  (Dataset, Problem_Size, Workload, Algorithm, Resource_Count) and skips
+  or tops up rather than duplicating, so an interrupted run can just be
+  re-invoked.
+- `Hardware` uses the actual chip name on macOS (`sysctl -n
+  machdep.cpu.brand_string`, e.g. "Apple M2") rather than the generic
+  `platform.machine()` string ("arm64"), falling back to the latter on
+  other platforms.

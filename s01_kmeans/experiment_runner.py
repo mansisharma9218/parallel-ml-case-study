@@ -14,12 +14,14 @@ from . import _pin_blas  # noqa: F401  (must precede `import numpy`)
 import argparse
 import csv
 import platform
+import subprocess
 from pathlib import Path
 
-from common import append_row, peak_memory_mb, timer, write_environment_json
+from common import append_row, timer, write_environment_json
 
 from . import config
 from .data_loading import generate_blobs, load_mnist
+from .memory_sampler import MemorySampler
 from .parallel import kmeans_parallel
 from .sequential import init_centroids, kmeans_sequential
 
@@ -51,7 +53,41 @@ def _append_iterations_row(row):
 
 
 def _hardware_label():
+    if platform.system() == "Darwin":
+        try:
+            brand = subprocess.run(
+                ["sysctl", "-n", "machdep.cpu.brand_string"],
+                capture_output=True, text=True, timeout=2, check=True,
+            ).stdout.strip()
+            if brand:
+                return brand
+        except (subprocess.SubprocessError, OSError):
+            pass
     return f"{platform.system()}-{platform.machine()}"
+
+
+def _load_completed_counts(csv_path):
+    """For resume support: how many raw rows already exist per
+    (Dataset, Problem_Size, Workload, Algorithm, Resource_Count), so a
+    re-run after a partial/interrupted sweep continues instead of
+    duplicating rows for configs already finished.
+    """
+    if not csv_path.exists():
+        return {}
+    import pandas as pd
+
+    df = pd.read_csv(csv_path)
+    counts = {}
+    for _, row in df.iterrows():
+        key = (
+            row["Dataset"],
+            int(row["Problem_Size"]),
+            row["Workload"],
+            row["Algorithm"],
+            int(row["Resource_Count"]),
+        )
+        counts[key] = counts.get(key, 0) + 1
+    return counts
 
 
 def _base_row(workload, dataset, size, algorithm, parallel_model, resource_count, threads, run_id):
@@ -70,19 +106,26 @@ def _base_row(workload, dataset, size, algorithm, parallel_model, resource_count
     }
 
 
-def _run_sequential_config(X, k, dataset_name, size, n_warmup, n_timed):
+def _run_sequential_config(X, k, dataset_name, size, n_warmup, n_timed, completed):
+    workload = f"kmeans_k{k}"
+    key = (dataset_name, X.shape[0], workload, "Lloyd-Sequential", 1)
+    already_done = completed.get(key, 0)
+    if already_done >= n_timed:
+        print(f"  sequential: already have {already_done}/{n_timed} runs, skipping")
+        return
+
     initial = init_centroids(X, k, seed=config.RANDOM_SEED)
 
     for _ in range(n_warmup):
         kmeans_sequential(X, k, initial, max_iter=config.MAX_ITER, tol=config.TOLERANCE)
 
-    for run_id in range(1, n_timed + 1):
-        with timer() as t:
+    for run_id in range(already_done + 1, n_timed + 1):
+        with timer() as t, MemorySampler() as mem:
             _, _, n_iter = kmeans_sequential(
                 X, k, initial, max_iter=config.MAX_ITER, tol=config.TOLERANCE
             )
         row = _base_row(
-            workload=f"kmeans_k{k}",
+            workload=workload,
             dataset=dataset_name,
             size=X.shape[0],
             algorithm="Lloyd-Sequential",
@@ -95,7 +138,7 @@ def _run_sequential_config(X, k, dataset_name, size, n_warmup, n_timed):
         row["Communication_Time"] = 0.0
         row["Synchronization_Time"] = 0.0
         row["Scheduling_Time"] = 0.0
-        row["Memory_Use"] = peak_memory_mb()
+        row["Memory_Use"] = mem.peak_mb
         row["Energy_if_available"] = ""
         append_row(RAW_CSV_PATH, row)
         _append_iterations_row(
@@ -111,7 +154,14 @@ def _run_sequential_config(X, k, dataset_name, size, n_warmup, n_timed):
         )
 
 
-def _run_parallel_config(X, k, n_workers, dataset_name, size, n_warmup, n_timed):
+def _run_parallel_config(X, k, n_workers, dataset_name, size, n_warmup, n_timed, completed):
+    workload = f"kmeans_k{k}"
+    key = (dataset_name, X.shape[0], workload, "Lloyd-Parallel-Pool", n_workers)
+    already_done = completed.get(key, 0)
+    if already_done >= n_timed:
+        print(f"  workers={n_workers}: already have {already_done}/{n_timed} runs, skipping")
+        return
+
     initial = init_centroids(X, k, seed=config.RANDOM_SEED)
 
     for _ in range(n_warmup):
@@ -119,13 +169,13 @@ def _run_parallel_config(X, k, n_workers, dataset_name, size, n_warmup, n_timed)
             X, k, initial, n_workers=n_workers, max_iter=config.MAX_ITER, tol=config.TOLERANCE
         )
 
-    for run_id in range(1, n_timed + 1):
-        with timer() as t:
+    for run_id in range(already_done + 1, n_timed + 1):
+        with timer() as t, MemorySampler() as mem:
             result = kmeans_parallel(
                 X, k, initial, n_workers=n_workers, max_iter=config.MAX_ITER, tol=config.TOLERANCE
             )
         row = _base_row(
-            workload=f"kmeans_k{k}",
+            workload=workload,
             dataset=dataset_name,
             size=X.shape[0],
             algorithm="Lloyd-Parallel-Pool",
@@ -138,7 +188,7 @@ def _run_parallel_config(X, k, n_workers, dataset_name, size, n_warmup, n_timed)
         row["Communication_Time"] = result.timing["communication"]
         row["Synchronization_Time"] = result.timing["synchronization"]
         row["Scheduling_Time"] = result.timing["scheduling"]
-        row["Memory_Use"] = peak_memory_mb()
+        row["Memory_Use"] = mem.peak_mb
         row["Energy_if_available"] = ""
         append_row(RAW_CSV_PATH, row)
         _append_iterations_row(
@@ -155,6 +205,10 @@ def _run_parallel_config(X, k, n_workers, dataset_name, size, n_warmup, n_timed)
 
 
 def run_grid(blob_sizes, k_values, worker_counts, n_warmup, n_timed, include_mnist=True):
+    completed = _load_completed_counts(RAW_CSV_PATH)
+    if completed:
+        print(f"Resuming: found existing results for {len(completed)} configuration(s).")
+
     for size in blob_sizes:
         X = generate_blobs(
             n_samples=size,
@@ -164,20 +218,24 @@ def run_grid(blob_sizes, k_values, worker_counts, n_warmup, n_timed, include_mni
         )
         for k in k_values:
             print(f"[blobs n={size} k={k}] sequential baseline...")
-            _run_sequential_config(X, k, "synthetic_blobs", size, n_warmup, n_timed)
+            _run_sequential_config(X, k, "synthetic_blobs", size, n_warmup, n_timed, completed)
             for n_workers in worker_counts:
                 print(f"[blobs n={size} k={k}] parallel workers={n_workers}...")
-                _run_parallel_config(X, k, n_workers, "synthetic_blobs", size, n_warmup, n_timed)
+                _run_parallel_config(
+                    X, k, n_workers, "synthetic_blobs", size, n_warmup, n_timed, completed
+                )
 
     if include_mnist:
         X, source = load_mnist()
         print(f"[mnist n={X.shape[0]}] (source={source})")
         for k in k_values:
             print(f"[mnist k={k}] sequential baseline...")
-            _run_sequential_config(X, k, "mnist", X.shape[0], n_warmup, n_timed)
+            _run_sequential_config(X, k, "mnist", X.shape[0], n_warmup, n_timed, completed)
             for n_workers in worker_counts:
                 print(f"[mnist k={k}] parallel workers={n_workers}...")
-                _run_parallel_config(X, k, n_workers, "mnist", X.shape[0], n_warmup, n_timed)
+                _run_parallel_config(
+                    X, k, n_workers, "mnist", X.shape[0], n_warmup, n_timed, completed
+                )
 
 
 def main():

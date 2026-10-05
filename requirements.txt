@@ -4,3 +4,4 @@ scikit-learn>=1.3
 pandas>=2.0
 matplotlib>=3.8
 pytest>=7.4
+psutil>=5.9  # S01: per-run memory sampling across worker processes (see s01_kmeans/memory_sampler.py)
