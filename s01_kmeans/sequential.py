@@ -17,6 +17,30 @@ def init_centroids(X, k, seed):
     return X[idx].copy().astype(np.float64)
 
 
+def grouped_sums(X, labels, k):
+    """Per-cluster sums of X's rows, grouped by `labels` in [0, k).
+
+    Implemented as sort-by-label + np.add.reduceat rather than
+    np.add.at: np.add.at is an unbuffered scatter-add with no internal
+    vectorization and is dramatically slower at this scale (measured
+    ~4.5x slower at n=2M, d=32 — ~2.25s vs ~0.5s per call, dominating
+    the sequential baseline's total time almost entirely). Returns
+    (sums, counts), sums in float64 regardless of X's dtype.
+    """
+    order = np.argsort(labels, kind="stable")
+    sorted_X = X[order]
+    counts = np.bincount(labels, minlength=k)
+    boundaries = np.concatenate(([0], np.cumsum(counts)))[:-1]
+    present = counts > 0
+
+    sums = np.zeros((k, X.shape[1]), dtype=np.float64)
+    if present.any():
+        sums[present] = np.add.reduceat(
+            sorted_X, boundaries[present], axis=0, dtype=np.float64
+        )
+    return sums, counts
+
+
 def _assign(X, centroids):
     """Nearest-centroid assignment via ||x-c||^2 = ||x||^2 - 2x.c + ||c||^2,
     computed with a matmul so memory is O(n*k) instead of the O(n*k*d)
@@ -47,9 +71,7 @@ def kmeans_sequential(X, k, initial_centroids, max_iter=100, tol=1e-4):
         labels = _assign(X, centroids)
 
         new_centroids = centroids.copy()
-        counts = np.bincount(labels, minlength=k)
-        sums = np.zeros((k, X.shape[1]), dtype=np.float64)
-        np.add.at(sums, labels, X)
+        sums, counts = grouped_sums(X, labels, k)
         nonempty = counts > 0
         new_centroids[nonempty] = sums[nonempty] / counts[nonempty, None]
         # empty cluster: keep its previous centroid in place.

@@ -24,6 +24,8 @@ from multiprocessing import shared_memory
 
 import numpy as np
 
+from .sequential import grouped_sums
+
 _shared_data = None
 _shm_handle = None
 
@@ -47,10 +49,7 @@ def _worker_partial_fit(start, end, centroids, k):
     dists = x_sq - 2.0 * cross + c_sq
     labels = dists.argmin(axis=1)
 
-    d = X_shard.shape[1]
-    partial_sums = np.zeros((k, d), dtype=np.float64)
-    np.add.at(partial_sums, labels, X_shard)
-    partial_counts = np.bincount(labels, minlength=k).astype(np.int64)
+    partial_sums, partial_counts = grouped_sums(X_shard, labels, k)
 
     compute_time = time.perf_counter() - t0
     return partial_sums, partial_counts, compute_time
