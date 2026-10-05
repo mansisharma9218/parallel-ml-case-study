@@ -13,6 +13,7 @@ from . import _pin_blas  # noqa: F401  (must precede `import numpy`)
 
 import argparse
 import csv
+import os
 import platform
 import subprocess
 from pathlib import Path
@@ -253,7 +254,33 @@ def main():
     args = parser.parse_args()
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    env = write_environment_json(ENV_JSON_PATH, extra={"student_id": config.STUDENT_ID, "batch_id": config.BATCH_ID})
+    env = write_environment_json(
+        ENV_JSON_PATH,
+        extra={
+            "student_id": config.STUDENT_ID,
+            "batch_id": config.BATCH_ID,
+            "cpu_model_detailed": _hardware_label(),  # common.collect_environment()'s cpu_model is just platform.processor() (e.g. "arm"), too generic
+            "gpu": "none (CPU-only; no GPU used)",
+            "optimization_flags": {
+                "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS"),
+                "OPENBLAS_NUM_THREADS": os.environ.get("OPENBLAS_NUM_THREADS"),
+                "VECLIB_MAXIMUM_THREADS": os.environ.get("VECLIB_MAXIMUM_THREADS"),
+                "note": "BLAS pinned to 1 thread so the sequential baseline is genuinely single-threaded; see _pin_blas.py",
+            },
+            "runtime_configuration": {
+                "blob_sizes": config.BLOB_SIZES,
+                "blob_n_features": config.BLOB_N_FEATURES,
+                "blob_true_centers": config.BLOB_TRUE_CENTERS,
+                "k_values": config.K_VALUES,
+                "worker_counts": config.WORKER_COUNTS,
+                "n_warmup_runs": config.N_WARMUP_RUNS,
+                "n_timed_runs": config.N_TIMED_RUNS,
+                "max_iter": config.MAX_ITER,
+                "tolerance": config.TOLERANCE,
+                "random_seed": config.RANDOM_SEED,
+            },
+        },
+    )
     print("Environment recorded:", env)
 
     if args.quick:
