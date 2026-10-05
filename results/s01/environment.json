@@ -1,0 +1,45 @@
+{
+  "cpu_model": "arm",
+  "cpu_cores_logical": 8,
+  "ram_gb": 8.0,
+  "os": "Darwin 27.0.0",
+  "os_version_detail": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:02:16 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T8112",
+  "machine": "arm64",
+  "python_version": "3.12.6",
+  "numpy_version": "2.3.4",
+  "student_id": "23BCE0856",
+  "batch_id": "CS10",
+  "cpu_model_detailed": "Apple M2",
+  "gpu": "none (CPU-only; no GPU used)",
+  "optimization_flags": {
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1",
+    "note": "BLAS pinned to 1 thread so the sequential baseline is genuinely single-threaded; see _pin_blas.py"
+  },
+  "runtime_configuration": {
+    "blob_sizes": [
+      100000,
+      500000,
+      2000000
+    ],
+    "blob_n_features": 32,
+    "blob_true_centers": 10,
+    "k_values": [
+      8,
+      16,
+      64
+    ],
+    "worker_counts": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "n_warmup_runs": 1,
+    "n_timed_runs": 5,
+    "max_iter": 100,
+    "tolerance": 0.0001,
+    "random_seed": 42
+  }
+}
