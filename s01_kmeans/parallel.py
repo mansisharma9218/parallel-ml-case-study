@@ -41,13 +41,18 @@ _shm_handle = None
 _shm_handle_T = None
 
 
+_WORKER_READY_TIMEOUT_SECONDS = 60
+
+
 def _worker_init(shm_name, shape, shm_name_T, shape_T, dtype_name, ready_barrier):
     global _shared_data, _shared_data_T, _shm_handle, _shm_handle_T
     _shm_handle = shared_memory.SharedMemory(name=shm_name)
     _shared_data = np.ndarray(shape, dtype=np.dtype(dtype_name), buffer=_shm_handle.buf)
     _shm_handle_T = shared_memory.SharedMemory(name=shm_name_T)
     _shared_data_T = np.ndarray(shape_T, dtype=np.dtype(dtype_name), buffer=_shm_handle_T.buf)
-    ready_barrier.wait()
+    # Timed: an unreached barrier (e.g. a sibling worker crashed on startup)
+    # would otherwise hang the main process forever instead of failing loudly.
+    ready_barrier.wait(timeout=_WORKER_READY_TIMEOUT_SECONDS)
 
 
 def _worker_partial_fit(start, end, centroids, k):
@@ -113,7 +118,9 @@ def kmeans_parallel(X, k, initial_centroids, n_workers, max_iter=100, tol=1e-4):
             initializer=_worker_init,
             initargs=(shm.name, X.shape, shm_T.name, X_T.shape, X.dtype.name, ready_barrier),
         )
-        ready_barrier.wait()  # blocks until every worker has imported numpy and opened shared memory
+        # Blocks until every worker has imported numpy and opened shared memory,
+        # or raises BrokenBarrierError within _WORKER_READY_TIMEOUT_SECONDS if one didn't.
+        ready_barrier.wait(timeout=_WORKER_READY_TIMEOUT_SECONDS)
         scheduling_time += time.perf_counter() - t_pool_create_start
 
         try:
