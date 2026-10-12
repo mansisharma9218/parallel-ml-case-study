@@ -1,0 +1,15 @@
+{
+  "cpu_model": "arm",
+  "cpu_cores_logical": 10,
+  "ram_gb": 16.0,
+  "os": "Darwin 25.6.0",
+  "os_version_detail": "Darwin Kernel Version 25.6.0: Fri Jul 31 19:16:20 PDT 2026; root:xnu-12377.161.14~5/RELEASE_ARM64_T8142",
+  "machine": "arm64",
+  "python_version": "3.14.7",
+  "numpy_version": "2.5.4",
+  "s02_k_neighbors": 5,
+  "s02_chunks_per_worker": 4,
+  "blas_threads_pinned_to": 1,
+  "performance_cores": "4",
+  "efficiency_cores": "6"
+}
