@@ -21,6 +21,7 @@ import csv
 import os
 import platform
 import subprocess
+import time
 from pathlib import Path
 
 from common import append_row, timer, write_environment_json
@@ -129,7 +130,7 @@ def _record_run(out_dir, hardware, size, algorithm, workers, run_id, elapsed, sa
     })
 
 
-def _run_config(fn, out_dir, hardware, completed, size, algorithm, workers, n_warmup, n_timed):
+def _run_config(fn, out_dir, hardware, completed, size, algorithm, workers, n_warmup, n_timed, cooldown):
     key = (config.DATASET, size, config.WORKLOAD, algorithm, workers)
     already_done = completed.get(key, 0)
     if already_done >= n_timed:
@@ -137,14 +138,16 @@ def _run_config(fn, out_dir, hardware, completed, size, algorithm, workers, n_wa
         return
     print(f"  {algorithm} workers={workers}...", flush=True)
     for _ in range(n_warmup):
+        time.sleep(cooldown)
         fn()
     for run_id in range(already_done + 1, n_timed + 1):
+        time.sleep(cooldown)  # untimed: lets the CPU recover from the previous run's sustained load
         with ResourceSampler() as sampler, timer() as t:  # sampler start/stop stays outside the timed region
             result = fn()
         _record_run(out_dir, hardware, size, algorithm, workers, run_id, t.elapsed, sampler, result)
 
 
-def run_grid(raw_path, out_dir, sizes, worker_counts, n_warmup, n_timed):
+def run_grid(raw_path, out_dir, sizes, worker_counts, n_warmup, n_timed, cooldown=0.0):
     completed = _load_completed_counts(out_dir / "raw_results.csv")
     if completed:
         print(f"Resuming: found existing results for {len(completed)} configuration(s).")
@@ -154,12 +157,12 @@ def run_grid(raw_path, out_dir, sizes, worker_counts, n_warmup, n_timed):
     for size in sizes:
         print(f"[{config.DATASET} n={size}]")
         _run_config(lambda: preprocess_sequential(raw_path, size, k),
-                    out_dir, hardware, completed, size, config.ALG_SEQ, 1, n_warmup, n_timed)
+                    out_dir, hardware, completed, size, config.ALG_SEQ, 1, n_warmup, n_timed, cooldown)
         for workers in worker_counts:
             for strategy, algorithm in STRATEGY_ALGORITHM.items():
                 _run_config(
                     lambda: preprocess_parallel(raw_path, size, k, workers, strategy, config.CHUNKS_PER_WORKER),
-                    out_dir, hardware, completed, size, algorithm, workers, n_warmup, n_timed,
+                    out_dir, hardware, completed, size, algorithm, workers, n_warmup, n_timed, cooldown,
                 )
 
 
@@ -167,6 +170,9 @@ def main():
     parser = argparse.ArgumentParser(description="Run the S03 preprocessing experiment grid.")
     parser.add_argument("--quick", action="store_true",
                         help="Tiny sizes/workers and 1 timed run, written to results/s03_quick.")
+    parser.add_argument("--cooldown", type=float, default=0.0,
+                        help="Seconds to pause (untimed) before every run, for machines that "
+                             "throttle under sustained load. Recorded in environment.json.")
     args = parser.parse_args()
 
     if args.quick:
@@ -204,12 +210,13 @@ def main():
                 "n_warmup_runs": config.N_WARMUP_RUNS,
                 "n_timed_runs": n_timed,
                 "start_method": "spawn",
+                "cooldown_seconds_before_each_run": args.cooldown,
             },
         },
     )
     print("Environment recorded:", env)
 
-    run_grid(raw_path, out_dir, sizes, workers, config.N_WARMUP_RUNS, n_timed)
+    run_grid(raw_path, out_dir, sizes, workers, config.N_WARMUP_RUNS, n_timed, args.cooldown)
     print(f"Done. Raw results appended to {out_dir / 'raw_results.csv'}")
 
 

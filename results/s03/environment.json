@@ -1,0 +1,38 @@
+{
+  "cpu_model": "Intel64 Family 6 Model 154 Stepping 3, GenuineIntel",
+  "cpu_cores_logical": 16,
+  "ram_gb": 15.68,
+  "os": "Windows 11",
+  "os_version_detail": "10.0.26200",
+  "machine": "AMD64",
+  "python_version": "3.13.7",
+  "numpy_version": "2.5.4",
+  "student_id": "23BCE0854",
+  "batch_id": "CS10",
+  "cpu_model_detailed": "12th Gen Intel(R) Core(TM) i5-1240P",
+  "gpu": "none (CPU-only; no GPU used)",
+  "optimization_flags": {
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1",
+    "note": "BLAS pinned to 1 thread so the sequential baseline is genuinely single-threaded; see _pin_blas.py"
+  },
+  "runtime_configuration": {
+    "problem_sizes": [
+      17500,
+      35000,
+      70000
+    ],
+    "worker_counts": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "n_components": 50,
+    "chunks_per_worker": 4,
+    "n_warmup_runs": 1,
+    "n_timed_runs": 5,
+    "start_method": "spawn"
+  }
+}
