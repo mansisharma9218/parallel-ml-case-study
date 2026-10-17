@@ -33,6 +33,7 @@
     "chunks_per_worker": 4,
     "n_warmup_runs": 1,
     "n_timed_runs": 5,
-    "start_method": "spawn"
+    "start_method": "spawn",
+    "cooldown_seconds_before_each_run": 0.0
   }
 }
