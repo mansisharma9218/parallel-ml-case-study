@@ -69,6 +69,12 @@ python -m s03_preprocessing.preprocess              # writes data/processed/* fo
 The full grid is 3 sizes (17.5k / 35k / 70k images) × (sequential + 2
 strategies × 1/2/4/8 workers) × 6 runs; expect roughly 15–25 minutes.
 
+On a machine that throttles under sustained load (see *Threats to
+validity*), add `--cooldown <seconds>` to pause, untimed, before every run;
+the value is recorded in `environment.json`. Because the runner is
+resume-safe, a size can be re-measured by deleting its rows from
+`raw_results.csv`, `stages.csv` and `run_metrics.csv` and re-running.
+
 ### Outputs
 
 `results/s03/`:
@@ -111,13 +117,22 @@ strategies × 1/2/4/8 workers) × 6 runs; expect roughly 15–25 minutes.
 
 ## Threats to validity
 
-- **Hybrid CPUs / power management.** On a Windows laptop with a 12th-gen
-  Intel CPU (performance + efficiency cores), single-process speed roughly
-  halved after ~25 s of sustained load, with no recovery after a 40 s rest,
-  consistent with the OS moving the process to efficiency cores and/or power
-  limits. That slows the sequential baseline more than the parallel runs and
-  produces superlinear "speedups". Run the full grid on the agreed reference
-  machine, on mains power, with nothing else running, and report medians.
+- **Machine state distorts the baseline.** On a Windows laptop (12th-gen
+  Intel i5-1240P, 16 GB, performance + efficiency cores) two effects were
+  seen: (1) a long-running process launched from a background terminal
+  roughly halved its single-core speed after ~25 s of load (not seen when
+  launched as a separate process); (2) at n=70,000 every stage cost ~2.5x
+  more per image than at 17.5k/35k, even with a 30 s untimed cool-down
+  before each run, while the system had only ~2.5 GB of RAM free -- most
+  likely memory pressure (paging/compression of the ~220 MB arrays). Both
+  slow the sequential baseline more than the parallel runs and produce
+  impossible results (speedup > 1 with one worker). Sanity check before
+  trusting a size: per-image stage cost must be roughly constant across
+  sizes, and 1-worker speedup must be < 1. Run on mains power, with other
+  applications closed, and report medians.
+- **Committed results currently cover n=17,500 and 35,000 only.** The
+  n=70,000 runs on the Windows laptop failed the check above and were
+  removed; they are to be re-measured on another machine.
 - The `load` stage reads from the OS page cache after the first run, so it
   measures memory bandwidth more than disk I/O.
 - The pipeline strategy is chunk-streaming (each worker runs consecutive
