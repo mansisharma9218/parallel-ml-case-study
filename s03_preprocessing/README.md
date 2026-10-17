@@ -120,19 +120,21 @@ resume-safe, a size can be re-measured by deleting its rows from
 - **Machine state distorts the baseline.** On a Windows laptop (12th-gen
   Intel i5-1240P, 16 GB, performance + efficiency cores) two effects were
   seen: (1) a long-running process launched from a background terminal
-  roughly halved its single-core speed after ~25 s of load (not seen when
-  launched as a separate process); (2) at n=70,000 every stage cost ~2.5x
-  more per image than at 17.5k/35k, even with a 30 s untimed cool-down
-  before each run, while the system had only ~2.5 GB of RAM free -- most
-  likely memory pressure (paging/compression of the ~220 MB arrays). Both
-  slow the sequential baseline more than the parallel runs and produce
-  impossible results (speedup > 1 with one worker). Sanity check before
+  roughly halved its single-core speed after ~25 s of load, which made
+  the first n=70,000 measurements cost ~2.5x more per image than at
+  17.5k/35k, even with a 30 s untimed cool-down before each run;
+  (2) launched as a separate process, one 70k run still showed the
+  1-worker runs slowing from 5.9 s to ~11 s over consecutive runs, while
+  a standalone check of the same configuration gave a steady 6.0 s --
+  a transient background disturbance (the repo sits in a OneDrive-synced
+  folder). Both effects produce impossible or inflated results (e.g.
+  speedup > 1 with one worker). The committed n=70,000 rows come from a
+  clean re-run launched as a separate process. Sanity check before
   trusting a size: per-image stage cost must be roughly constant across
-  sizes, and 1-worker speedup must be < 1. Run on mains power, with other
-  applications closed, and report medians.
-- **Committed results currently cover n=17,500 and 35,000 only.** The
-  n=70,000 runs on the Windows laptop failed the check above and were
-  removed; they are to be re-measured on another machine.
+  sizes (it is: deskew ~48-51 us, PCA ~20-24 us per image at all three
+  sizes), 1-worker speedup must be < 1, and the 5 runs of a configuration
+  should agree closely. Run on mains power, with other applications
+  closed and file sync paused, and report medians.
 - The `load` stage reads from the OS page cache after the first run, so it
   measures memory bandwidth more than disk I/O.
 - The pipeline strategy is chunk-streaming (each worker runs consecutive
