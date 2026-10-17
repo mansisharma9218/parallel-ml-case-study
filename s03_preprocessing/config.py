@@ -2,8 +2,6 @@
 modules, so every raw CSV row and environment record is consistent.
 """
 
-# TODO: set your own registration number before the full run
-# (experiment_runner refuses a full run while this is still the placeholder).
 STUDENT_ID = "23BCE0854"
 BATCH_ID = "CS10"
 
