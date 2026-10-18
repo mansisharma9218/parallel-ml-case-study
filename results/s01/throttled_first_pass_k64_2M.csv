@@ -1,0 +1,26 @@
+Student_ID,Batch_ID,Workload,Dataset,Problem_Size,Algorithm,Parallel_Model,Hardware,Resource_Count,Threads,Execution_Time,Speedup,Efficiency,Communication_Time,Synchronization_Time,Scheduling_Time,Memory_Use,Energy_if_available,Run_ID
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Sequential,None,Apple M2,1,1,47.48710679099895,,,0.0,0.0,0.0,1964.40625,,1
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Sequential,None,Apple M2,1,1,47.10422970900254,,,0.0,0.0,0.0,1964.96875,,2
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Sequential,None,Apple M2,1,1,46.835376499999256,,,0.0,0.0,0.0,1965.671875,,3
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Sequential,None,Apple M2,1,1,46.79784016600024,,,0.0,0.0,0.0,1975.515625,,4
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Sequential,None,Apple M2,1,1,46.85851470800117,,,0.0,0.0,0.0,1982.421875,,5
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,1,1,50.001654874999076,,,0.7550032920080412,0.009041756031365367,0.2409046630091325,2517.734375,,1
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,1,1,47.91163166700062,,,0.7023849920042267,0.014880125017953105,0.19596029703097884,2197.171875,,2
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,1,1,74.38915354100027,,,1.5849282150120416,0.03664911800660775,0.17351878598492476,2521.34375,,3
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,1,1,54.74136008300047,,,1.031578634014295,0.021733836987550603,0.36982249797074473,2336.703125,,4
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,1,1,59.64150158399934,,,1.2456682959891623,0.024230247974628583,0.17296524697667337,2324.90625,,5
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,2,1,34.43954762499925,,,0.5735118220218283,0.014641297995694913,0.3115872050257167,2532.640625,,1
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,2,1,33.94945616699988,,,0.5290101210193825,0.012220257991430117,0.2017729630206304,2528.109375,,2
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,2,1,32.38844108400008,,,0.44400120498539764,0.015216328996757511,0.1926994980094605,3001.15625,,3
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,2,1,31.347178417003306,,,0.43087249999007327,0.014091833985730773,0.17516107800111058,2843.703125,,4
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,2,1,30.81907454099928,,,0.36998470198886935,0.013231494005594868,0.17707583698938834,3062.6875,,5
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,4,1,16.02132637500108,,,0.21033744999658666,0.013475293006194988,0.18159604800894158,4273.640625,,1
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,4,1,16.706885416999285,,,0.21828353304226766,0.008720707999600563,0.17691400103649357,3822.4375,,2
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,4,1,16.267872832999274,,,0.20930328897520667,0.008297413005493581,0.18429875898800674,4239.90625,,3
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,4,1,16.785282208002172,,,0.22146629002600093,0.015184001029410865,0.17891154099925188,4085.515625,,4
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,4,1,17.639236125000025,,,0.24252320902087376,0.009676622001279611,0.17383295201943838,3718.40625,,5
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,8,1,16.289917124999192,,,0.2650787450183998,0.026317500985896913,0.21271537101711147,6361.859375,,1
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,8,1,19.213919582998642,,,0.43505941798866843,0.044130461996246595,0.23576099501224235,5830.421875,,2
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,8,1,22.691113665998273,,,0.452224708016729,0.03791183798603015,0.2879336229925684,5701.734375,,3
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,8,1,27.75002362500163,,,0.4844620470321388,0.04197246101102792,0.30303287602509954,5470.484375,,4
+23BCE0856,CS10,kmeans_k64,synthetic_blobs,2000000,Lloyd-Parallel-Pool,multiprocessing.Pool+shared_memory,Apple M2,8,1,32.50398912499804,,,0.41046421503051533,0.035470920993248,0.361007496027014,5525.828125,,5

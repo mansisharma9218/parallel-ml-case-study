@@ -16,7 +16,6 @@ import csv
 import os
 import platform
 import subprocess
-from pathlib import Path
 
 from common import append_row, timer, write_environment_json
 
@@ -25,12 +24,6 @@ from .data_loading import generate_blobs, load_mnist
 from .memory_sampler import MemorySampler
 from .parallel import kmeans_parallel
 from .sequential import init_centroids, kmeans_sequential
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
-RESULTS_DIR = REPO_ROOT / "results" / "s01"
-RAW_CSV_PATH = RESULTS_DIR / "raw_results.csv"
-ITERATIONS_CSV_PATH = RESULTS_DIR / "iterations.csv"
-ENV_JSON_PATH = RESULTS_DIR / "environment.json"
 
 ITERATIONS_COLUMNS = [
     "Dataset",
@@ -43,10 +36,10 @@ ITERATIONS_COLUMNS = [
 ]
 
 
-def _append_iterations_row(row):
-    ITERATIONS_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
-    file_exists = ITERATIONS_CSV_PATH.exists()
-    with open(ITERATIONS_CSV_PATH, "a", newline="") as f:
+def _append_iterations_row(path, row):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    file_exists = path.exists()
+    with open(path, "a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=ITERATIONS_COLUMNS)
         if not file_exists:
             writer.writeheader()
@@ -107,7 +100,7 @@ def _base_row(workload, dataset, size, algorithm, parallel_model, resource_count
     }
 
 
-def _run_sequential_config(X, k, dataset_name, size, n_warmup, n_timed, completed):
+def _run_sequential_config(X, k, dataset_name, size, n_warmup, n_timed, completed, paths):
     workload = f"kmeans_k{k}"
     key = (dataset_name, X.shape[0], workload, "Lloyd-Sequential", 1)
     already_done = completed.get(key, 0)
@@ -141,8 +134,9 @@ def _run_sequential_config(X, k, dataset_name, size, n_warmup, n_timed, complete
         row["Scheduling_Time"] = 0.0
         row["Memory_Use"] = mem.peak_mb
         row["Energy_if_available"] = ""
-        append_row(RAW_CSV_PATH, row)
+        append_row(paths.raw_csv, row)
         _append_iterations_row(
+            paths.iterations_csv,
             {
                 "Dataset": dataset_name,
                 "Problem_Size": X.shape[0],
@@ -155,7 +149,7 @@ def _run_sequential_config(X, k, dataset_name, size, n_warmup, n_timed, complete
         )
 
 
-def _run_parallel_config(X, k, n_workers, dataset_name, size, n_warmup, n_timed, completed):
+def _run_parallel_config(X, k, n_workers, dataset_name, size, n_warmup, n_timed, completed, paths):
     workload = f"kmeans_k{k}"
     key = (dataset_name, X.shape[0], workload, "Lloyd-Parallel-Pool", n_workers)
     already_done = completed.get(key, 0)
@@ -191,8 +185,9 @@ def _run_parallel_config(X, k, n_workers, dataset_name, size, n_warmup, n_timed,
         row["Scheduling_Time"] = result.timing["scheduling"]
         row["Memory_Use"] = mem.peak_mb
         row["Energy_if_available"] = ""
-        append_row(RAW_CSV_PATH, row)
+        append_row(paths.raw_csv, row)
         _append_iterations_row(
+            paths.iterations_csv,
             {
                 "Dataset": dataset_name,
                 "Problem_Size": X.shape[0],
@@ -205,8 +200,8 @@ def _run_parallel_config(X, k, n_workers, dataset_name, size, n_warmup, n_timed,
         )
 
 
-def run_grid(blob_sizes, k_values, worker_counts, n_warmup, n_timed, include_mnist=True):
-    completed = _load_completed_counts(RAW_CSV_PATH)
+def run_grid(paths, blob_sizes, k_values, worker_counts, n_warmup, n_timed, include_mnist=True):
+    completed = _load_completed_counts(paths.raw_csv)
     if completed:
         print(f"Resuming: found existing results for {len(completed)} configuration(s).")
 
@@ -219,11 +214,11 @@ def run_grid(blob_sizes, k_values, worker_counts, n_warmup, n_timed, include_mni
         )
         for k in k_values:
             print(f"[blobs n={size} k={k}] sequential baseline...")
-            _run_sequential_config(X, k, "synthetic_blobs", size, n_warmup, n_timed, completed)
+            _run_sequential_config(X, k, "synthetic_blobs", size, n_warmup, n_timed, completed, paths)
             for n_workers in worker_counts:
                 print(f"[blobs n={size} k={k}] parallel workers={n_workers}...")
                 _run_parallel_config(
-                    X, k, n_workers, "synthetic_blobs", size, n_warmup, n_timed, completed
+                    X, k, n_workers, "synthetic_blobs", size, n_warmup, n_timed, completed, paths
                 )
 
     if include_mnist:
@@ -231,11 +226,11 @@ def run_grid(blob_sizes, k_values, worker_counts, n_warmup, n_timed, include_mni
         print(f"[mnist n={X.shape[0]}] (source={source})")
         for k in k_values:
             print(f"[mnist k={k}] sequential baseline...")
-            _run_sequential_config(X, k, "mnist", X.shape[0], n_warmup, n_timed, completed)
+            _run_sequential_config(X, k, "mnist", X.shape[0], n_warmup, n_timed, completed, paths)
             for n_workers in worker_counts:
                 print(f"[mnist k={k}] parallel workers={n_workers}...")
                 _run_parallel_config(
-                    X, k, n_workers, "mnist", X.shape[0], n_warmup, n_timed, completed
+                    X, k, n_workers, "mnist", X.shape[0], n_warmup, n_timed, completed, paths
                 )
 
 
@@ -244,7 +239,7 @@ def main():
     parser.add_argument(
         "--quick",
         action="store_true",
-        help="Tiny sizes/K/workers and 1 timed run, to sanity-check the pipeline in under a minute.",
+        help="Tiny sizes/K/workers and 1 timed run, to sanity-check the pipeline in under a minute (writes to results/s01_quick).",
     )
     parser.add_argument(
         "--no-mnist",
@@ -253,9 +248,12 @@ def main():
     )
     args = parser.parse_args()
 
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    paths = config.results_paths(quick=args.quick)
+    paths.results_dir.mkdir(parents=True, exist_ok=True)
+    if args.quick:
+        (paths.results_dir / ".gitignore").write_text("*\n")
     env = write_environment_json(
-        ENV_JSON_PATH,
+        paths.environment_json,
         extra={
             "student_id": config.STUDENT_ID,
             "batch_id": config.BATCH_ID,
@@ -285,6 +283,7 @@ def main():
 
     if args.quick:
         run_grid(
+            paths,
             blob_sizes=[2_000, 5_000],
             k_values=[2, 4],
             worker_counts=[1, 2],
@@ -294,6 +293,7 @@ def main():
         )
     else:
         run_grid(
+            paths,
             blob_sizes=config.BLOB_SIZES,
             k_values=config.K_VALUES,
             worker_counts=config.WORKER_COUNTS,
@@ -302,7 +302,7 @@ def main():
             include_mnist=not args.no_mnist,
         )
 
-    print(f"Done. Raw results appended to {RAW_CSV_PATH}")
+    print(f"Done. Raw results appended to {paths.raw_csv}")
 
 
 if __name__ == "__main__":

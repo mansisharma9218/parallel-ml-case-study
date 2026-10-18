@@ -40,6 +40,9 @@ do this before a full run to catch problems early):
 python3 -m s01_kmeans.experiment_runner --quick
 ```
 
+`--quick` writes to `results/s01_quick/` (git-ignored), not `results/s01/`;
+run `python3 -m s01_kmeans.analysis --quick` to analyse it.
+
 Add `--no-mnist` to skip MNIST (useful offline — MNIST download needs
 network access the first time it's used).
 
@@ -134,3 +137,33 @@ python3 -m pytest s01_kmeans/tests/ -v
   machdep.cpu.brand_string`, e.g. "Apple M2") rather than the generic
   `platform.machine()` string ("arm64"), falling back to the latter on
   other platforms.
+
+## Caveats for the report
+
+- **Iteration counts.** 225 of 300 runs stop at the 100-iteration cap
+  rather than converging (tolerance 1e-4 on absolute centroid movement is
+  strict), so for most settings "time" means "time for 100 iterations".
+  At k=8 the 500k dataset converges in 4 iterations while 100k takes 80,
+  which makes `time_vs_samples_k8` look non-monotonic. Use the
+  `time_per_iteration_vs_samples_k*.png` plots for scaling: roughly
+  13 -> 88 -> 269 ms per iteration for 100k -> 500k -> 2M.
+- **k=64, 2M points was re-run.** The first pass was distorted by
+  throttling (8-worker runs slowed 16.3 -> 32.5 s across repetitions, one
+  1-worker run took 74.4 s), which made 8 workers look slower than 4. It was
+  re-run on AC power with the laptop kept awake (the 2-worker setting was
+  re-run once more after the laptop slept mid-run). Only these rows changed;
+  8 workers now takes 14.8 s median (3.28x) versus 17.2 s for 4 (2.82x).
+  Note that the 4-worker runs still creep up slightly (15.8 -> 17.7 s).
+  The original first-pass rows are kept, unaltered, in
+  `results/s01/throttled_first_pass_k64_2M.csv` as a documented outlier and
+  are not used in `summary.csv` or the plots.
+- **MNIST source.** S01's MNIST came from its own copy
+  (`mnist_normalized_fallback.npy`) because S03's file did not exist yet;
+  S03's `data/processed/mnist_normalized.npy` was checked to be
+  bit-identical, so results remain valid.
+- **One worker slightly faster than sequential** (up to ~6%, e.g. MNIST
+  k=8, 1.06x), most likely a cache effect from chunking.
+- **`Memory_Use` under-counts shared data** (USS excludes the shared
+  dataset, see above).
+- **Hardware.** Apple M2, 8 GB, Python 3.12.6; other sub-problems ran on
+  different machines, so combined tables need a hardware label.
