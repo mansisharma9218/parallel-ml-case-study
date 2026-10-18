@@ -59,13 +59,10 @@ python -m pytest s01_kmeans/tests s02_knn/tests s03_preprocessing/tests -q
 **Quick sanity runs** (tiny sizes, under a minute each):
 
 ```bash
+python -m s01_kmeans.experiment_runner --quick --no-mnist  # -> results/s01_quick (git-ignored)
 python -m s02_knn.experiment_runner --quick            # -> results/s02_quick (git-ignored)
 python -m s03_preprocessing.experiment_runner --quick  # -> results/s03_quick (git-ignored)
 ```
-
-> Note: `s01_kmeans.experiment_runner --quick` currently writes into the
-> committed `results/s01/` folder (appending test rows and overwriting
-> `environment.json`), so don't run it inside the repo until that is fixed.
 
 **Full experiments, then analysis** (each runner is resume-safe: re-running
 skips configurations that already have all their timed runs):
