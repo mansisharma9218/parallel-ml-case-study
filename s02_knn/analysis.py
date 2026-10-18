@@ -43,7 +43,8 @@ def build_summary(raw, acc=None):
 
 def _save(fig, path):
     fig.tight_layout()
-    fig.savefig(path, dpi=150)
+    for ext in ("png", "svg"):  # PNG for viewing, SVG as the editable form
+        fig.savefig(path.with_suffix(f".{ext}"), dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 

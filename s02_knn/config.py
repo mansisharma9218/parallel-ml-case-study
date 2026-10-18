@@ -1,7 +1,6 @@
 """Fixed experiment constants for S02 (parallel k-NN)."""
 from pathlib import Path
 
-# TODO: set your own registration number before the full run.
 STUDENT_ID = "23BCE0905"
 BATCH_ID = "CS10"
 

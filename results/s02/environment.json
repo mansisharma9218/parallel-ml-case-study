@@ -7,6 +7,41 @@
   "machine": "arm64",
   "python_version": "3.14.7",
   "numpy_version": "2.5.4",
+  "student_id": "23BCE0905",
+  "batch_id": "CS10",
+  "cpu_model_detailed": "Apple M5",
+  "gpu": "none (CPU-only; no GPU used)",
+  "optimization_flags": {
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1",
+    "note": "BLAS pinned to 1 thread so the sequential baseline is genuinely single-threaded; see _pin_blas.py"
+  },
+  "runtime_configuration": {
+    "train_sizes": [
+      6000,
+      15000,
+      30000,
+      60000
+    ],
+    "query_counts": [
+      1000,
+      5000,
+      10000
+    ],
+    "worker_counts": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "k_neighbors": 5,
+    "chunks_per_worker": 4,
+    "query_block": 256,
+    "n_warmup_runs": 1,
+    "n_timed_runs": 5,
+    "random_seed": 42
+  },
   "s02_k_neighbors": 5,
   "s02_chunks_per_worker": 4,
   "blas_threads_pinned_to": 1,
