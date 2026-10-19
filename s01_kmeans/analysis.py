@@ -72,7 +72,8 @@ def build_summary(df):
 
 def _save(fig, plots_dir, name):
     plots_dir.mkdir(parents=True, exist_ok=True)
-    fig.savefig(plots_dir / name, dpi=150, bbox_inches="tight")
+    for ext in ("png", "svg"):  # PNG for viewing, SVG as the editable form
+        fig.savefig((plots_dir / name).with_suffix(f".{ext}"), dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
