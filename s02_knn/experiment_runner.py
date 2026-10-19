@@ -7,6 +7,7 @@
 from . import _pin_blas  # noqa: F401
 import argparse
 import csv
+import os
 import platform
 import subprocess
 from pathlib import Path
@@ -140,6 +141,27 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     perf, eff = _sysctl("hw.perflevel0.physicalcpu"), _sysctl("hw.perflevel1.physicalcpu")
     write_environment_json(out_dir / "environment.json", extra={
+        "student_id": C.STUDENT_ID,
+        "batch_id": C.BATCH_ID,
+        "cpu_model_detailed": hardware_name(),
+        "gpu": "none (CPU-only; no GPU used)",
+        "optimization_flags": {
+            "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS"),
+            "OPENBLAS_NUM_THREADS": os.environ.get("OPENBLAS_NUM_THREADS"),
+            "VECLIB_MAXIMUM_THREADS": os.environ.get("VECLIB_MAXIMUM_THREADS"),
+            "note": "BLAS pinned to 1 thread so the sequential baseline is genuinely single-threaded; see _pin_blas.py",
+        },
+        "runtime_configuration": {
+            "train_sizes": sizes,
+            "query_counts": qcounts,
+            "worker_counts": workers,
+            "k_neighbors": C.K_NEIGHBORS,
+            "chunks_per_worker": C.CHUNKS_PER_WORKER,
+            "query_block": C.QUERY_BLOCK,
+            "n_warmup_runs": C.N_WARMUP,
+            "n_timed_runs": C.N_RUNS,
+            "random_seed": C.SEED,
+        },
         "s02_k_neighbors": C.K_NEIGHBORS, "s02_chunks_per_worker": C.CHUNKS_PER_WORKER,
         "blas_threads_pinned_to": 1, "performance_cores": perf, "efficiency_cores": eff})
 

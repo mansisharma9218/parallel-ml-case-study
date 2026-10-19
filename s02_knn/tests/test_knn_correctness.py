@@ -48,3 +48,19 @@ def test_more_workers_than_queries(problem):
     seq = search_sequential(Q, X, xsq, K)
     with SearchContext(X, Q, K) as ctx, PoolRunner(ctx, 4) as r:
         assert _same_sets(r.query_parallel()[0], seq) == 1.0
+
+
+@pytest.mark.parametrize("workers", [2, 4])
+def test_parallel_exact_match_no_ties(workers):
+    """Random float data with a fixed seed has no tied distances, so both
+    parallel strategies must return exactly the sequential neighbour sets."""
+    rng = np.random.default_rng(12345)
+    X = rng.random((3000, 48), dtype=np.float32)
+    Q = rng.random((200, 48), dtype=np.float32)
+    xsq = np.einsum("ij,ij->i", X, X).astype(np.float32)
+    seq = search_sequential(Q, X, xsq, K)
+    with SearchContext(X, Q, K) as ctx, PoolRunner(ctx, workers) as r:
+        qi = r.query_parallel()[0]
+        di = r.data_parallel()[0]
+    assert _same_sets(qi, seq) == 1.0
+    assert _same_sets(di, seq) == 1.0

@@ -6,7 +6,7 @@ synchronization / scheduling overhead. Accuracy is recorded separately from runt
 
 ## Setup
 Same environment as S01 (`pip install -r requirements.txt` from the repo root). No new dependencies.
-Before a full run, set `STUDENT_ID` in `s02_knn/config.py`.
+`STUDENT_ID` in `s02_knn/config.py` is already set to `23BCE0905`.
 
 ## Modules
 | Module | Job |
@@ -38,3 +38,19 @@ Writes `results/s02/{raw_results.csv, accuracy.csv, summary.csv, environment.jso
 - `Speedup`/`Efficiency` are left empty in `raw_results.csv` and computed only in `analysis.py`.
 - Accuracy lives in `accuracy.csv` (not in the shared schema) and is computed outside the timed region.
 - `Memory_Use` is peak USS, so the shared-memory dataset is largely invisible to it (same caveat as S01).
+
+## Reference machine
+Apple M5, 16 GB RAM, 10 cores (4 performance + 6 efficiency), Python 3.14.7, NumPy 2.5.4, CPU only
+(no GPU). Full details in `results/s02/environment.json`.
+
+## Comparing S02 with S01 and S03
+- **Scaling:** S02 divides MNIST pixels by 255. S01 and S03 scale each column by its own min and
+  max. Kept deliberately; S02's inputs are therefore not byte-identical to the other parts.
+- **Pool start-up:** S02's `Execution_Time` excludes pool start-up (median ~0.095 s, recorded in
+  `Scheduling_Time`), while S01 and S03 include it. This makes S02's speedups about 19% more
+  favourable than under the S01/S03 convention.
+- **Communication_Time** is about 0.2% of total parallel runtime. It covers data transfer
+  (IPC + pickling) plus load imbalance.
+- **Memory_Use** is peak USS, so it under-counts the shared-memory dataset.
+- **Speedup/Efficiency** are intentionally blank in `raw_results.csv`; the spec asks for them to be
+  calculated from the raw data, and `summary.csv` holds them. All three parts do it this way.
