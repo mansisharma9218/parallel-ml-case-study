@@ -76,9 +76,12 @@ from the raw times, and writes:
 
 - `results/s01/summary.csv` — median/std execution time, speedup, efficiency per configuration
 - `results/s01/plots/time_vs_samples_k<K>.png`
+- `results/s01/plots/time_per_iteration_vs_samples_k<K>.png`
 - `results/s01/plots/speedup_vs_workers_<dataset>_n<size>.png`
 - `results/s01/plots/time_breakdown_<dataset>_n<size>_k<K>.png` — stacked compute/IPC/reduction/scheduling
 - `results/s01/plots/iterations_vs_configuration.png`
+
+Each plot is saved as both `.png` and `.svg` (editable).
 
 ## Tests
 
